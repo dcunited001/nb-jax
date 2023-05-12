@@ -194,12 +194,12 @@ repo sync has finished successfully.
 From here, running diff on the two directories produces much more reasonable
 output, though emacs will limit the diff to the subdirectories.
 
-#+begin_src sh :results output file :file rocm046.diff
+#+begin_src sh :results output file :file jaxrocm046.diff
 diff -r -x .git src/jax046 src/jaxrocm # completes with exit code 1 though
 #+end_src
 
 #+RESULTS:
-[[file:rocm046.diff]]
+[[file:jaxrocm046.diff]]
 
 Trying to figure out how the ROCmSoftwarePlatform forks differ from the source
 projects has been a major impediment to figuring out:
