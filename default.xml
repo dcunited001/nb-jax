@@ -3,6 +3,7 @@
   <remote name="github" fetch="https://github.com"/>
   <default remote="github" sync-j="8" revision="refs/heads/master"/>
   <project name="google/jax" path="jax" revision="refs/heads/main" remote="github" />
+  <project name="google/jax" path="jax046" revision="refs/tags/jaxlib-v0.4.6" remote="github" />
   <project name="ROCmSoftwarePlatform/jax" path="jaxrocm" revision="refs/tags/jaxlib-v0.4.6-rocm55" remote="github" />
   <project name="geomstats/geomstats" path="geomstats" revision="refs/heads/master" remote="github" />
 </manifest>

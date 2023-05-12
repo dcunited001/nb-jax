@@ -1,0 +1,339 @@
+diff -r -x .git src/jax046/build/rocm/build_rocm.sh src/jaxrocm/build/rocm/build_rocm.sh
+15a16,26
+> # Environment Var Notes
+> # XLA_CLONE_DIR	-
+> #	Specifies filepath to where XLA repo is cloned. 
+> #	NOTE:, if this is set then XLA repo is not cloned. Must clone repo before running this script. 
+> #	Also, if this is set then setting XLA_REPO and XLA_BRANCH have no effect.
+> # XLA_REPO 
+> #	XLA repo to clone from. Default is https://github.com/ROCmSoftwarePlatform/tensorflow-upstream
+> # XLA_BRANCH
+> #	XLA branch in the XLA repo. Default is develop-upstream-jax
+> #
+> 
+16a28,38
+> pyenv local $PYTHON_VERSION
+> python -V
+> 
+> #If XLA_REPO is not set, then use default
+> if [ ! -v XLA_REPO ]; then
+> 	XLA_REPO="https://github.com/ROCmSoftwarePlatform/tensorflow-upstream"
+> 	XLA_BRANCH="develop-upstream-jax"
+> elif [ -z "$XLA_REPO" ]; then
+> 	XLA_REPO="https://github.com/ROCmSoftwarePlatform/tensorflow-upstream"
+> 	XLA_BRANCH="develop-upstream-jax"
+> fi
+18,29c40,51
+< ROCM_TF_FORK_REPO="https://github.com/ROCmSoftwarePlatform/tensorflow-upstream"
+< ROCM_TF_FORK_BRANCH="develop-upstream"
+< rm -rf /tmp/tensorflow-upstream || true
+< git clone -b ${ROCM_TF_FORK_BRANCH} ${ROCM_TF_FORK_REPO} /tmp/tensorflow-upstream
+< if [ ! -v TENSORFLOW_ROCM_COMMIT ]; then
+<     echo "The TENSORFLOW_ROCM_COMMIT environment variable is not set, using top of branch"
+< elif [ ! -z "$TENSORFLOW_ROCM_COMMIT" ]
+< then
+<       echo "Using tensorflow-rocm at commit: $TENSORFLOW_ROCM_COMMIT"
+<       cd /tmp/tensorflow-upstream
+<       git checkout $TENSORFLOW_ROCM_COMMIT
+<       cd -
+---
+> #If XLA_CLONE_PATH is not set, then use default path. 
+> #Note, setting XLA_CLONE_PATH makes setting XLA_REPO and XLA_BRANCH a no-op
+> #Set this when XLA repository has been already clone. This is useful in CI
+> #environments and when doing local development
+> if [ ! -v XLA_CLONE_DIR ]; then
+> 	XLA_CLONE_DIR=/tmp/tensorflow-upstream
+> 	rm -rf /tmp/tensorflow-upstream || true
+> 	git clone -b ${XLA_BRANCH} ${XLA_REPO} /tmp/tensorflow-upstream
+> elif [ -z "$XLA_CLONE_DIR" ]; then
+> 	XLA_CLONE_DIR=/tmp/tensorflow-upstream
+> 	rm -rf /tmp/tensorflow-upstream || true
+> 	git clone -b ${XLA_BRANCH} ${XLA_REPO} /tmp/tensorflow-upstream
+33c55,60
+< python3 ./build/build.py --enable_rocm --rocm_path=${ROCM_PATH} --bazel_options=--override_repository=org_tensorflow=/tmp/tensorflow-upstream
+---
+> #Export JAX_ROCM_VERSION so that it is appened in the wheel name
+> rocm_version=$(cat /opt/rocm/.info/version | cut -d "-" -f 1)
+> export JAX_ROCM_VERSION=${rocm_version//./}
+> 
+> #Build and install wheel
+> python3 ./build/build.py --enable_rocm --rocm_path=${ROCM_PATH} --bazel_options=--override_repository=org_tensorflow=${XLA_CLONE_DIR}
+35a63,68
+> 
+> #This is for CI to read without having to start the container again
+> if [ -v CI_RUN ]; then
+> 	pip3 list | grep jaxlib | tr -s ' ' | cut -d " " -f 2 > jax_version_installed 
+> 	cat /opt/rocm/.info/version | cut -d "-" -f 1 > jax_rocm_version
+> fi
+diff -r -x .git src/jax046/build/rocm/ci_build.sh src/jaxrocm/build/rocm/ci_build.sh
+16c16
+< # Usage: ci_build.sh [--dockerfile <DOCKERFILE_PATH> --keep_image]
+---
+> # Usage: ci_build.sh [--dockerfile <DOCKERFILE_PATH> --keep_image --py_version <PYTHON_VERSION>]
+19c19
+< # DOCKERFILE_PATH: (Optional) Path to the Dockerfile used for docker build.
+---
+> # DOCKERFILE_PATH: (Optional) Path to the Dockerfile used for docer build.
+24a25
+> # PYTHON_VERSION: Python version to use
+25a27,33
+> #
+> # Environment variables read by this script
+> # WORKSPACE
+> # XLA_REPO
+> # XLA_BRANCH
+> # XLA_CLONE_DIR
+> # BUILD_TAG
+35a44
+> KEEP_CONTAINER="--rm"
+38c47
+< RUNTIME_FLAG=0
+---
+> RUNTIME_FLAG=1
+41a51,54
+>     --py_version)
+>       PYTHON_VERSION="$2"
+>       shift 2
+>       ;;
+54a68,72
+>     --keep_container)
+>       KEEP_CONTAINER=""
+>       shift 1
+>       ;;
+> 
+81c99
+< DOCKER_IMG_NAME="${BUILD_TAG}_${CONTAINER_TYPE}"
+---
+> DOCKER_IMG_NAME="${BUILD_TAG}.${CONTAINER_TYPE}"
+96a115,116
+> echo "Building container (${DOCKER_IMG_NAME})..."
+> echo "Python Version (${PYTHON_VERSION})"
+99a120
+>     --build-arg PYTHON_VERSION=$PYTHON_VERSION \
+103a125
+>     --build-arg PYTHON_VERSION=$PYTHON_VERSION \
+115c137,144
+< export TENSORFLOW_ROCM_COMMIT="${TENSORFLOW_ROCM_COMMIT:-}"
+---
+> export XLA_REPO="${XLA_REPO:-}"
+> export XLA_BRANCH="${XLA_BRANCH:-}"
+> export XLA_CLONE_DIR="${XLA_CLONE_DIR:-}"
+> export JAX_RENAME_WHL="${XLA_CLONE_DIR:-}"
+> 
+> if [ ! -z ${XLA_CLONE_DIR} ]; then
+> 	ROCM_EXTRA_PARAMS=${ROCM_EXTRA_PARAMS}" -v ${XLA_CLONE_DIR}:${XLA_CLONE_DIR}"
+> fi
+120c149,153
+<   -e TENSORFLOW_ROCM_COMMIT=${TENSORFLOW_ROCM_COMMIT} \
+---
+>   -e XLA_REPO=${XLA_REPO} \
+>   -e XLA_BRANCH=${XLA_BRANCH} \
+>   -e XLA_CLONE_DIR=${XLA_CLONE_DIR} \
+>   -e PYTHON_VERSION=$PYTHON_VERSION \
+>   -e CI_RUN=1 \
+126c159
+<   echo "Committing the docker container as jax-rocm"
+---
+>   echo "Committing the docker container as ${DOCKER_IMG_NAME}"
+128c161
+<   docker commit ${DOCKER_IMG_NAME} jax-rocm
+---
+>   docker commit ${DOCKER_IMG_NAME} ${DOCKER_IMG_NAME}
+130d162
+<   docker rmi ${DOCKER_IMG_NAME}   # remote this temp image
+diff -r -x .git src/jax046/build/rocm/Dockerfile.ms src/jaxrocm/build/rocm/Dockerfile.ms
+5c5,8
+< ARG ROCM_PATH=/opt/rocm-5.4.0
+---
+> ARG ROCM_DEB_REPO=http://repo.radeon.com/rocm/apt/5.5/
+> ARG ROCM_BUILD_NAME=ubuntu
+> ARG ROCM_BUILD_NUM=main
+> ARG ROCM_PATH=/opt/rocm-5.5.0
+7a11
+> ARG PYTHON_VERSION=3.9.0
+10a15,24
+> RUN apt-get --allow-unauthenticated update && apt install -y wget software-properties-common
+> RUN apt-get clean all
+> RUN wget -qO - https://repo.radeon.com/rocm/rocm.gpg.key | apt-key add -;
+> RUN bin/bash -c 'if [[ $ROCM_DEB_REPO == http://repo.radeon.com/rocm/*  ]] ; then \
+>       echo "deb [arch=amd64] $ROCM_DEB_REPO $ROCM_BUILD_NAME $ROCM_BUILD_NUM" > /etc/apt/sources.list.d/rocm.list; \
+>     else \
+>       echo "deb [arch=amd64 trusted=yes] $ROCM_DEB_REPO $ROCM_BUILD_NAME $ROCM_BUILD_NUM" > /etc/apt/sources.list.d/rocm.list ; \
+>     fi'
+> 
+> 
+23a38,41
+>   python-is-python3 \
+>   libffi-dev \
+>   libssl-dev \
+>   hipblaslt-dev \
+27a46,54
+> # Add to get ppa
+> RUN apt-get update
+> RUN apt-get install -y software-properties-common
+> # Install rocm pkgs
+> RUN apt-get update --allow-insecure-repositories && \
+>     DEBIAN_FRONTEND=noninteractive apt-get install -y --allow-unauthenticated \
+>     rocm-dev rocm-libs rccl && \
+>     apt-get clean && \
+>     rm -rf /var/lib/apt/lists/*
+58,65c85,86
+< RUN add-apt-repository ppa:deadsnakes/ppa && \
+<   apt update && \
+<   apt install -y python3.9-dev \
+<     python3-pip \
+<     python3.9-distutils \
+<     python-is-python3
+< 
+< RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
+---
+> # Install pyenv with different python versions
+> RUN git clone https://github.com/pyenv/pyenv.git /pyenv
+67c88,89
+< RUN pip3 install --upgrade --force-reinstall setuptools pip
+---
+> ENV PYENV_ROOT /pyenv
+> ENV PATH $PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH
+69c91
+< RUN pip3 install absl-py numpy==1.20.0 scipy wheel six setuptools pytest pytest-rerunfailures matplotlib
+---
+> RUN pyenv install $PYTHON_VERSION
+71,72c93,96
+< # Get jax and build it with ROCm
+< RUN git clone https://github.com/google/jax.git 
+---
+> RUN eval "$(pyenv init -)" && pyenv local ${PYTHON_VERSION} && pip3 install --upgrade --force-reinstall setuptools pip==22.0 && pip install numpy==1.21.0 setuptools wheel six auditwheel scipy pytest pytest-rerunfailures matplotlib absl-py
+>  
+> ## Get jax and build it with ROCm
+> #RUN git clone https://github.com/google/jax.git 
+75c99
+< FROM rt_build as ci_build
+---
+> #FROM rt_build as ci_build
+77,80c101,104
+< WORKDIR /jax
+< RUN ./build/rocm/build_rocm.sh 
+< RUN ./build/rocm/run_single_gpu.py 
+< RUN ./build/rocm/run_multi_gpu.sh
+---
+> #WORKDIR /jax
+> #RUN ./build/rocm/build_rocm.sh 
+> #RUN ./build/rocm/run_single_gpu.py 
+> #RUN ./build/rocm/run_multi_gpu.sh
+diff -r -x .git src/jax046/build/rocm/Dockerfile.rocm src/jaxrocm/build/rocm/Dockerfile.rocm
+9a10
+> ARG PYTHON_VERSION=3.9.0
+35a37,39
+>   python-is-python3 \
+>   libffi-dev \
+>   libssl-dev \
+76a81,82
+> # Install pyenv with different python versions
+> RUN git clone https://github.com/pyenv/pyenv.git /pyenv
+78,84c84,85
+< # Install python3.9
+< RUN add-apt-repository ppa:deadsnakes/ppa && \
+<   apt update && \
+<   apt install -y python3.9-dev \
+<     python3-pip \
+<     python3.9-distutils \
+<     python-is-python3
+---
+> ENV PYENV_ROOT /pyenv
+> ENV PATH $PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH
+86c87,89
+< RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
+---
+> RUN pyenv install $PYTHON_VERSION
+> 
+> RUN eval "$(pyenv init -)" && pyenv local ${PYTHON_VERSION} && pip3 install --upgrade --force-reinstall setuptools pip==22.0 && pip install numpy==1.21.0 setuptools wheel six auditwheel scipy pytest pytest-rerunfailures matplotlib absl-py
+88d90
+< RUN pip3 install --upgrade --force-reinstall setuptools pip
+90d91
+< RUN pip3 install absl-py numpy==1.20.0 scipy wheel six setuptools pytest pytest-rerunfailures matplotlib
+diff -r -x .git src/jax046/build/rocm/run_multi_gpu.sh src/jaxrocm/build/rocm/run_multi_gpu.sh
+19,20c19,32
+< python3 -m pytest --reruns 3 -x tests/pmap_test.py
+< python3 -m pytest --reruns 3 -x tests/multi_device_test.py
+---
+> cmd=$(lspci|grep 'controller'|grep 'AMD/ATI'|wc -l)
+> echo $cmd
+> 
+> if [[ $cmd -gt 8 ]]; then
+> 	export HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 && python3 -m pytest --reruns 3 -x tests/pmap_test.py 
+> elif [[ $cmd -gt 4 ]]; then
+> 	export HIP_VISIBLE_DEVICES=0,1,2,3 && python3 -m pytest --reruns 3 -x tests/pmap_test.py
+> elif [[ $cmd -gt 2 ]]; then
+> 	export HIP_VISIBLE_DEVICES=0,1 && python3 -m pytest --reruns 3 -x tests/pmap_test.py 
+> else
+> 	export HIP_VISIBLE_DEVICES=0 && python3 -m pytest --reruns 3 -x tests/pmap_test.py
+> fi
+> 
+> #python3 -m pytest --reruns 3 -x tests/multi_device_test.py
+diff -r -x .git src/jax046/jax/_src/test_util.py src/jaxrocm/jax/_src/test_util.py
+1147c1147,1148
+<     return self.supported([_dtypes.bfloat16, np.float16, np.float32, np.float64])
+---
+>     return self.supported([np.float16, np.float32, np.float64])
+>     #return self.supported([_dtypes.bfloat16, np.float16, np.float32, np.float64])
+diff -r -x .git src/jax046/jaxlib/setup.py src/jaxrocm/jaxlib/setup.py
+32a33,37
+> rocm_version = os.environ.get("JAX_ROCM_VERSION")
+> if rocm_version:
+>     project_name = 'jaxlib-rocm'
+>     __version__ += f".{rocm_version.replace('.', '')}"
+> 
+diff -r -x .git src/jax046/tests/api_test.py src/jaxrocm/tests/api_test.py
+5339a5340
+>   @jtu.skip_on_devices("rocm")
+diff -r -x .git src/jax046/tests/compilation_cache_test.py src/jaxrocm/tests/compilation_cache_test.py
+211a212
+>   @jtu.skip_on_devices("rocm")   
+232a234
+>   @jtu.skip_on_devices("rocm")   
+250a253
+>   @jtu.skip_on_devices("rocm")   
+264a268
+>   @jtu.skip_on_devices("rocm")   
+275a280
+>   @jtu.skip_on_devices("rocm")   
+295a301
+>   @jtu.skip_on_devices("rocm")   
+315a322
+>   @jtu.skip_on_devices("rocm")   
+331a339
+>   @jtu.skip_on_devices("rocm")   
+347a356
+>   @jtu.skip_on_devices("rocm")   
+diff -r -x .git src/jax046/tests/lax_numpy_test.py src/jaxrocm/tests/lax_numpy_test.py
+4072a4073
+>   @jtu.skip_on_devices("rocm")
+diff -r -x .git src/jax046/tests/linalg_test.py src/jaxrocm/tests/linalg_test.py
+182a183
+>   @jtu.skip_on_devices("rocm")
+diff -r -x .git src/jax046/tests/scipy_stats_test.py src/jaxrocm/tests/scipy_stats_test.py
+546a547
+>   @jtu.skip_on_devices("rocm")
+564a566
+>   @jtu.skip_on_devices("rocm")
+582a585
+>   @jtu.skip_on_devices("rocm")
+600a604
+>   @jtu.skip_on_devices("rocm")
+618a623
+>   @jtu.skip_on_devices("rocm")
+636a642
+>   @jtu.skip_on_devices("rocm")
+diff -r -x .git src/jax046/tests/sparse_test.py src/jaxrocm/tests/sparse_test.py
+356a357
+>   @jtu.skip_on_devices("rocm")
+376a378
+>   @jtu.skip_on_devices("rocm")
+690a693
+>   @jtu.skip_on_devices("rocm")
+713a717
+>   @jtu.skip_on_devices("rocm")
+736a741
+>   @jtu.skip_on_devices("rocm")
+757a763
+>   @jtu.skip_on_devices("rocm")
