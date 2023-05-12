@@ -10,20 +10,35 @@ Not a poetry project.
 * Resources
 
 * Build
-** Docker
 
- Find it on [[hub.docker.com/r/rocm/jax-build/tags][hub.docker.com/r/rocm/jax-build/tags]]
+#+begin_src sh :tangle .envrc.eg :tangle-mode (identity #o400)
+export PATH=${PWD}/bin:$PATH
+#+end_src
+
+** JAX rocm
+
+#+header: :noweb-ref jax-rocm-wheel :noweb-sep ""
+#+begin_src emacs-lisp
+https://github.com/ROCmSoftwarePlatform/jax/releases/download/jaxlib-v0.4.6-rocm55/jaxlib-0.4.6.550-cp39-cp39-manylinux2014_x86_64.whl
+#+end_src
+
+There is a recent jax image [[hub.docker.com/r/rocm/jax-build/tags][hub.docker.com/r/rocm/jax-build/tags]], but the python
+it builds with doesn't pack sqlite and can't run jupyter..
 
 #+header: :noweb-ref jax-build-image :noweb-sep ""
 #+begin_src emacs-lisp
 rocm/jax-build:rocm5.5.0-jax0.4.6.550-py3.8.0
 #+end_src
 
-Or use =rocm/tensorflow=
+** Docker
+
+Use =rocm/tensorflow-build= to fix JAX compatibility issues. This image will
+build TF, but doesn't already have it. To be compatible with JAX 0.4.6, it needs
+to be build.
 
 #+header: :noweb-ref tf-rocm-image :noweb-sep ""
 #+begin_src emacs-lisp
-rocm/tensorflow:latest
+rocm/tensorflow-build:latest-focal-python3.9
 #+end_src
 
 
@@ -56,10 +71,11 @@ Dockerfile:
 FROM <<tf-rocm-image>>
 
 RUN pip3 install -U pip setuptools
-RUN pip3 install jaxlib-rocm
+RUN pip3 install <<jax-rocm-wheel>>
+RUN pip3 install jax==0.4.6
 RUN pip3 install jupyterlab pandas~=2.0.0
-RUN pip3 install tensorboard
-RUN pip3 install geomstats
+#RUN pip3 install tensorboard
+#RUN pip3 install geomstats
 #+end_src
 
 Don't run this from emacs (no wonder there's no docker-build command)
@@ -108,6 +124,8 @@ docker compose --env-file=.env.jupyter -f compose-jupyter.yml
 #+begin_src sh :tangle bin/drun.sh :noweb yes
 #ROCM_IMAGE=<<tf-rocm-image>>
 ROCM_IMAGE=<<tf-rocm>>
+#      --group-add render \
+#
 docker run \
       -it \
       --network=host \
@@ -117,10 +135,9 @@ docker run \
       --ipc=host \
       --shm-size 16G \
       --group-add video \
-      --group-add render \
       --cap-add=SYS_PTRACE \
       --security-opt seccomp=unconfined \
-      -e JAX_PLATFORMS=cpu,gpu \
+      -e JAX_PLATFORMS=cpu,rocm \
       -e HSA_OVERRIDE_GFX_VERSION=10.3.0 \
       -v ${PWD}/jax:/workspace/jax \
       -v ${PWD}/nb:/workspace/nb \
@@ -288,5 +305,14 @@ xla_client.CompileOptions()
 
 xla_bridge.backends()
 #+end_src
+
+** Getting =tensorflow-rocm= to use JAX 0.4.6
+
+
+
+#+begin_example
+RuntimeError: jaxlib version 0.4.6 is newer than and incompatible with jax
+version 0.3.25. Please update your jax and/or jaxlib packages.
+#+end_example
 
 * Notebooks
