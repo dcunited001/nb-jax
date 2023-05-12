@@ -18,11 +18,12 @@ Not a poetry project.
   <remote name="github" fetch="https://github.com"/>
   <default remote="github" sync-j="8" revision="refs/heads/master"/>
   <project name="google/jax" path="jax" revision="refs/heads/main" remote="github" />
+  <project name="ROCmSoftwarePlatform/jax" path="jax" revision="refs/tags/jaxlib-v0.4.6-rocm55" remote="github" />
   <project name="geomstats/geomstats" path="geomstats" revision="refs/heads/master" remote="github" />
 </manifest>
 #+end_src
 
-Can clone with:
+Can sync with:
 
 #+begin_src sh
 WD=$(pwd)
@@ -58,38 +59,47 @@ each thing i'm interested in is exhausting. Other options are:
 rocm/jax-build:rocm5.5.0-jax0.4.6.550-py3.8.0
 #+end_src
 
+Or use =rocm/tensorflow=
+
+#+header: :noweb-ref tf-rocm-image :noweb-sep ""
+#+begin_src emacs-lisp
+rocm/tensorflow:latest
+#+end_src
+
+
 Pull the =rocm/jax-build= image. The =:latest= tag doesn't pull.
 
 #+header: :tangle-mode (identity #o700) :mkdir yes :shebang #!/bin/bash
 #+begin_src sh :tangle dpull.jupyter.sh :noweb yes
-docker pull <<jax-build-image>>
+docker pull <<tf-rocm-image>>
 #+end_src
 
 ** Jupyter
 
 Image tag:
 
-#+header: :noweb-ref jax-jupyter-img :noweb-sep ""
+#+header: :noweb-ref tf-rocm :noweb-sep ""
 #+begin_src emacs-lisp
-jax-jupyter-img
+tf-rocm
 #+end_src
 
 Container tag:
 
-#+header: :noweb-ref jax-jupyter-container :noweb-sep ""
+#+header: :noweb-ref tf-rocm-jupyter :noweb-sep ""
 #+begin_src emacs-lisp
-jax-jupyter
+tf-rocm-jupyter
 #+end_src
 
 Dockerfile:
 
 #+header: :tangle-mode (identity #o400)
 #+begin_src dockerfile :tangle Dockerfile.jupyter :noweb yes
-FROM <<jax-build-image>>
+FROM <<tf-rocm-image>>
 
 RUN pip3 install -U pip setuptools
+RUN pip3 install jaxlib-rocm
 RUN pip3 install jupyterlab pandas~=2.0.0
-RUN pip3 install tensorflow-rocm tensorboard
+RUN pip3 install tensorboard
 RUN pip3 install geomstats
 #+end_src
 
@@ -99,10 +109,12 @@ Don't run this from emacs (no wonder there's no docker-build command)
 #+begin_src sh :tangle dbuild.sh :noweb yes
 DOCKER_CONTEXT_PATH=$(pwd)
 DOCKERFILE_PATH=Dockerfile.jupyter
-docker build --tag <<jax-jupyter-img>> -f $DOCKERFILE_PATH $DOCKER_CONTEXT_PATH
+docker build --tag <<tf-rocm>> -f $DOCKERFILE_PATH $DOCKER_CONTEXT_PATH
 #+end_src
 
-And the compose environment:
+*** TODO Run WIth Docker Compose
+
+The compose environment:
 
 #+header: :tangle-mode (identity #o400) :mkdir yes
 #+begin_src sh :tangle .env.jupyter :noweb yes
@@ -115,7 +127,7 @@ And the docker compose:
 version: '3'
 services:
   jupyter:
-    image: <<jax-jupyter-img>>
+    image: <<tf-rocm>>
     ports:
       - 8080:8888
     environment:
@@ -134,14 +146,12 @@ And the launcher script:
 docker compose --env-file=.env.jupyter -f compose-jupyter.yml
 #+end_src
 
-*** TODO fix docker compose so it starts right
-
-Until then
+*** Run With Docker
 
 #+header: :tangle-mode (identity #o700) :mkdir yes :shebang #!/bin/bash
 #+begin_src sh :tangle drun.sh :noweb yes
-#ROCM_IMAGE=<<jax-build-image>>
-ROCM_IMAGE=<<jax-jupyter-img>>
+#ROCM_IMAGE=<<tf-rocm-image>>
+ROCM_IMAGE=<<tf-rocm>>
 docker run \
       -it \
       --network=host \
@@ -154,6 +164,7 @@ docker run \
       --group-add render \
       --cap-add=SYS_PTRACE \
       --security-opt seccomp=unconfined \
+      -e JAX_PLATFORMS=cpu,gpu \
       -e HSA_OVERRIDE_GFX_VERSION=10.3.0 \
       -v ${PWD}/jax:/workspace/jax \
       -v ${PWD}/nb:/workspace/nb \
@@ -176,8 +187,12 @@ To enable them in other operations, rebuild TensorFlow with the appropriate comp
 >>>
 #+end_example
 
-Well, I spoke too soon. Unfortunately from this point, I can't rebuild python or
-install a new python. AFAIK the JAX branch isn't on the system.
+* Issues
+
+** The =rocm/jax-build= image lacks python with sqlite3
+
+From here I can't rebuild python or install a new python. AFAIK the JAX branch
+isn't on the system.
 
 #+begin_example
 root@kratos:/# python
@@ -194,7 +209,46 @@ from _sqlite3 import *
 ModuleNotFoundError: No module named '_sqlite3'
 #+end_example
 
-According to [[github:google/jax/issues/15983][google/jax#15983]], I may just be able to install the jaxlib.whl on top of
-the =rcom/tensorflow= image
+According to [[github:google/jax/issues/15983][google/jax#15983]], I can simply install the jaxlib.whl on top of the
+=rcom/tensorflow= image
+
+** Getting JAX to recognize the ROCm GPU device
+
+The =rocm/tensorflow= image with =jaxlib-rocm= installed doesn't initially
+recognize my ROCm device even though it shows in =tf.config.list_physical_devices()=.
+
+#+begin_src python
+import jax.numpy as jnp
+from jax import config as jcfg
+from jax import grad, jit, vmap
+from jax import random
+
+key = random.PRNGKey(0)
+
+#jcfg.jax_platforms
+#+end_src
+
+The above will either: warn: =No GPU/TPU= or error with:
+
+#+begin_example
+Unable to initialize backend 'rocm': module 'jaxlib.xla_extension' has no attribute 'GpuAllocatorConfig' (set JAX_PLATFORMS='' to automatically choose an available backend)
+#+end_example
+
+Tracing through the following should help. The JAX platform parameters are
+initialized with flags & environment variables in  =jax/_src/config.py=.
+
+#+begin_src python
+from jax._src.lib import xla_client
+from jax._src.lib import xla_bridge
+from jax._src.config import flags
+
+#FLAGS = flags.FLAGS
+#FLAGS.jax_platflorm_name
+
+xla_bridge.is_known_platform('rocm') # True
+xla_client.CompileOptions()
+
+xla_bridge.backends()
+#+end_src
 
 * Notebooks
