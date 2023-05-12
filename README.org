@@ -87,8 +87,10 @@ Dockerfile:
 #+begin_src dockerfile :tangle Dockerfile.jupyter :noweb yes
 FROM <<jax-build-image>>
 
-# tensorflow-rocm
-RUN pip3 install jupyter geomstats
+RUN pip3 install -U pip setuptools
+RUN pip3 install jupyterlab pandas~=2.0.0
+RUN pip3 install tensorflow-rocm tensorboard
+RUN pip3 install geomstats
 #+end_src
 
 Don't run this from emacs (no wonder there's no docker-build command)
@@ -116,6 +118,8 @@ services:
     image: <<jax-jupyter-img>>
     ports:
       - 8080:8888
+    environment:
+      - HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION}
     volumes:
       - ${PWD}/jax:/workspace/jax
       - ${PWD}/nb:/workspace/nb
@@ -129,5 +133,46 @@ And the launcher script:
 # seems to be crashing unless ran specifically
 docker compose --env-file=.env.jupyter -f compose-jupyter.yml
 #+end_src
+
+***** TODO fix docker compose so it starts right
+Until then
+
+#+header: :tangle-mode (identity #o700) :mkdir yes :shebang #!/bin/bash
+#+begin_src sh :tangle drun.sh :noweb yes
+#ROCM_IMAGE=<<jax-build-image>>
+ROCM_IMAGE=<<jax-jupyter-img>>
+docker run \
+      -it \
+      --network=host \
+      --device=/dev/kfd \
+      --device=/dev/dri/card0 \
+      --device=/dev/dri/renderD128 \
+      --ipc=host \
+      --shm-size 16G \
+      --group-add video \
+      --group-add render \
+      --cap-add=SYS_PTRACE \
+      --security-opt seccomp=unconfined \
+      -e HSA_OVERRIDE_GFX_VERSION=10.3.0 \
+      -v ${PWD}/jax:/workspace/jax \
+      -v ${PWD}/nb:/workspace/nb \
+      $ROCM_IMAGE \
+      /bin/bash
+#+end_src
+
+Dammit, finally.
+
+#+begin_example
+root@kratos:/home/jenkins/workspace/jax/releases/jax-release_jaxlib-v0.4.6-rocm55# python
+Python 3.8.0 (default, May 10 2023, 04:51:38)
+[GCC 9.4.0] on linux
+Type "help", "copyright", "credits" or "license" for more information.
+>>> import tensorflow as tf
+2023-05-12 11:10:03.009878: I tensorflow/core/platform/cpu_feature_guard.cc:193] This TensorFlow binary is optimized with oneAPI Deep Neural Network Library (oneDNN) to use the following CPU instructions in performance-critical operations:  AVX2 FMA
+To enable them in other operations, rebuild TensorFlow with the appropriate compiler flags.
+>>> tf.config.list_physical_devices()
+[PhysicalDevice(name='/physical_device:CPU:0', device_type='CPU'), PhysicalDevice(name='/physical_device:GPU:0', device_type='GPU')]
+>>>
+#+end_example
 
 * Notebooks
