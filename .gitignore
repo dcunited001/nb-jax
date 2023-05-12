@@ -1,0 +1,6 @@
+/src
+!/src/.gitkeep
+/bin
+
+/.envrc
+/.env.jupyter

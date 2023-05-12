@@ -1,6 +1,7 @@
 #+TITLE:     Jupyter: Jax
 #+AUTHOR:    David Conner
 #+DESCRIPTION: notes
+#+PROPERTY: header-args:sh     :tangle-mode (identity #o500) :mkdirp yes :shebang #!/bin/bash
 
 Not a poetry project.
 
@@ -9,6 +10,10 @@ Not a poetry project.
 * Resources
 
 * Code
+
+#+begin_src sh :tangle .envrc.eg :tangle-mode (identity #o400)
+export PATH=./bin:$PATH
+#+end_src
 
 ** Repo
 
@@ -26,9 +31,10 @@ Not a poetry project.
 Can sync with:
 
 #+begin_src sh
-WD=$(pwd)
+export WD=$(pwd)
 cd src
-repo init -m "$WD"
+#repo init file://$WD/default.xml --standalone-manifest
+repo init -u file://$WD -m default.xml
 
 if [ $? -eq 0 ]; then
     repo sync
@@ -37,8 +43,10 @@ else
 fi
 #+end_src
 
-I haven't tested =repo sync= from a single file, but the following script should
-do it. It just can't be used for CI, all the remotes need to be specified in the
+I haven't tested =repo sync= from a single file, but the above script almost
+does it. It gets =default.xml= into =src/.repo/manifests=.
+
+This method can't be used for CI, all the remotes need to be specified in the
 file and some features don't work. Still, I just want the code for reference --
 I think? Why? I found [[https://github.com/google/jax/blob/main/docs/autodidax.md][autodidax.md]] _because it was local._
 
@@ -69,8 +77,7 @@ rocm/tensorflow:latest
 
 Pull the =rocm/jax-build= image. The =:latest= tag doesn't pull.
 
-#+header: :tangle-mode (identity #o700) :mkdir yes :shebang #!/bin/bash
-#+begin_src sh :tangle dpull.jupyter.sh :noweb yes
+#+begin_src sh :tangle bin/dpull.jupyter.sh :noweb yes
 docker pull <<tf-rocm-image>>
 #+end_src
 
@@ -105,8 +112,7 @@ RUN pip3 install geomstats
 
 Don't run this from emacs (no wonder there's no docker-build command)
 
-#+header: :tangle-mode (identity #o700) :mkdir yes :shebang #!/bin/bash
-#+begin_src sh :tangle dbuild.sh :noweb yes
+#+begin_src sh :tangle bin/dbuild.sh :noweb yes
 DOCKER_CONTEXT_PATH=$(pwd)
 DOCKERFILE_PATH=Dockerfile.jupyter
 docker build --tag <<tf-rocm>> -f $DOCKERFILE_PATH $DOCKER_CONTEXT_PATH
@@ -139,8 +145,7 @@ services:
 
 And the launcher script:
 
-#+header: :tangle-mode (identity #o700) :mkdir yes :shebang #!/bin/bash
-#+begin_src sh :tangle dcomp.sh
+#+begin_src sh :tangle bin/dcomp.sh
 # up -d $@ ... hmmmm....
 # seems to be crashing unless ran specifically
 docker compose --env-file=.env.jupyter -f compose-jupyter.yml
@@ -148,8 +153,7 @@ docker compose --env-file=.env.jupyter -f compose-jupyter.yml
 
 *** Run With Docker
 
-#+header: :tangle-mode (identity #o700) :mkdir yes :shebang #!/bin/bash
-#+begin_src sh :tangle drun.sh :noweb yes
+#+begin_src sh :tangle bin/drun.sh :noweb yes
 #ROCM_IMAGE=<<tf-rocm-image>>
 ROCM_IMAGE=<<tf-rocm>>
 docker run \
