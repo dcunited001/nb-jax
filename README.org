@@ -134,7 +134,8 @@ And the launcher script:
 docker compose --env-file=.env.jupyter -f compose-jupyter.yml
 #+end_src
 
-***** TODO fix docker compose so it starts right
+*** TODO fix docker compose so it starts right
+
 Until then
 
 #+header: :tangle-mode (identity #o700) :mkdir yes :shebang #!/bin/bash
@@ -174,5 +175,26 @@ To enable them in other operations, rebuild TensorFlow with the appropriate comp
 [PhysicalDevice(name='/physical_device:CPU:0', device_type='CPU'), PhysicalDevice(name='/physical_device:GPU:0', device_type='GPU')]
 >>>
 #+end_example
+
+Well, I spoke too soon. Unfortunately from this point, I can't rebuild python or
+install a new python. AFAIK the JAX branch isn't on the system.
+
+#+begin_example
+root@kratos:/# python
+Python 3.8.0 (default, May 10 2023, 04:51:38)
+[GCC 9.4.0] on linux
+Type "help", "copyright", "credits" or "license" for more information.
+>>> import sqlite3
+Traceback (most recent call last):
+File "<stdin>", line 1, in <module>
+File "/pyenv/versions/3.8.0/lib/python3.8/sqlite3/__init__.py", line 23, in <module>
+from sqlite3.dbapi2 import *
+File "/pyenv/versions/3.8.0/lib/python3.8/sqlite3/dbapi2.py", line 27, in <module>
+from _sqlite3 import *
+ModuleNotFoundError: No module named '_sqlite3'
+#+end_example
+
+According to [[github:google/jax/issues/15983][google/jax#15983]], I may just be able to install the jaxlib.whl on top of
+the =rcom/tensorflow= image
 
 * Notebooks
