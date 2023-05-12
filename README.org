@@ -9,56 +9,8 @@ Not a poetry project.
 
 * Resources
 
-* Code
-
-#+begin_src sh :tangle .envrc.eg :tangle-mode (identity #o400)
-export PATH=./bin:$PATH
-#+end_src
-
-** Repo
-
-#+begin_src xml :tangle default.xml
-<?xml version="1.0" encoding="utf-8"?>
-<manifest>
-  <remote name="github" fetch="https://github.com"/>
-  <default remote="github" sync-j="8" revision="refs/heads/master"/>
-  <project name="google/jax" path="jax" revision="refs/heads/main" remote="github" />
-  <project name="ROCmSoftwarePlatform/jax" path="jaxrocm" revision="refs/tags/jaxlib-v0.4.6-rocm55" remote="github" />
-  <project name="geomstats/geomstats" path="geomstats" revision="refs/heads/master" remote="github" />
-</manifest>
-#+end_src
-
-Can sync with:
-
-#+begin_src sh
-export WD=$(pwd)
-cd src
-#repo init file://$WD/default.xml --standalone-manifest
-repo init -u file://$WD -m default.xml
-
-if [ $? -eq 0 ]; then
-    repo sync
-else
-    echo "couldn't repo init" && exit 1
-fi
-#+end_src
-
-I haven't tested =repo sync= from a single file, but the above script almost
-does it. It gets =default.xml= into =src/.repo/manifests=.
-
-This method can't be used for CI, all the remotes need to be specified in the
-file and some features don't work. Still, I just want the code for reference --
-I think? Why? I found [[https://github.com/google/jax/blob/main/docs/autodidax.md][autodidax.md]] _because it was local._
-
-I'm just experimenting with different workflows here, since =git submodules= for
-each thing i'm interested in is exhausting. Other options are:
-
-+ Branches, but I have to switch each time
-+ Files, but I think subject to the same limitation
-+ Orphan branches but ... blech even more confusing.
-+ XML Manifest Server: probably the better option.
-
 * Build
+** Docker
 
  Find it on [[hub.docker.com/r/rocm/jax-build/tags][hub.docker.com/r/rocm/jax-build/tags]]
 
@@ -81,7 +33,7 @@ Pull the =rocm/jax-build= image. The =:latest= tag doesn't pull.
 docker pull <<tf-rocm-image>>
 #+end_src
 
-** Jupyter
+*** Jupyter
 
 Image tag:
 
@@ -118,7 +70,7 @@ DOCKERFILE_PATH=Dockerfile.jupyter
 docker build --tag <<tf-rocm>> -f $DOCKERFILE_PATH $DOCKER_CONTEXT_PATH
 #+end_src
 
-*** TODO Run WIth Docker Compose
+**** TODO Run WIth Docker Compose
 
 The compose environment:
 
@@ -151,7 +103,7 @@ And the launcher script:
 docker compose --env-file=.env.jupyter -f compose-jupyter.yml
 #+end_src
 
-*** Run With Docker
+**** Run With Docker
 
 #+begin_src sh :tangle bin/drun.sh :noweb yes
 #ROCM_IMAGE=<<tf-rocm-image>>
@@ -190,6 +142,53 @@ To enable them in other operations, rebuild TensorFlow with the appropriate comp
 [PhysicalDevice(name='/physical_device:CPU:0', device_type='CPU'), PhysicalDevice(name='/physical_device:GPU:0', device_type='GPU')]
 >>>
 #+end_example
+
+* External Source
+
+** Repo
+
+#+begin_src xml :tangle default.xml
+<?xml version="1.0" encoding="utf-8"?>
+<manifest>
+  <remote name="github" fetch="https://github.com"/>
+  <default remote="github" sync-j="8" revision="refs/heads/master"/>
+  <project name="google/jax" path="jax" revision="refs/heads/main" remote="github" />
+  <project name="ROCmSoftwarePlatform/jax" path="jaxrocm" revision="refs/tags/jaxlib-v0.4.6-rocm55" remote="github" />
+  <project name="geomstats/geomstats" path="geomstats" revision="refs/heads/master" remote="github" />
+</manifest>
+#+end_src
+
+Can sync with:
+
+#+begin_src sh
+export WD=$(pwd)
+cd src
+#repo init file://$WD/default.xml --standalone-manifest
+repo init -u file://$WD -m default.xml
+
+if [ $? -eq 0 ]; then
+    repo sync
+else
+    echo "couldn't repo init" && exit 1
+fi
+#+end_src
+
+I haven't tested =repo sync= from a single file, but the above script almost
+does it. It gets =default.xml= into =src/.repo/manifests=.
+
+*** Just testing this repo workflow
+
+This method can't be used for CI, all the remotes need to be specified in the
+file and some features don't work. Still, I just want the code for reference --
+I think? Why? I found [[https://github.com/google/jax/blob/main/docs/autodidax.md][autodidax.md]] _because it was local._
+
+I'm just experimenting with different workflows here, since =git submodules= for
+each thing i'm interested in is exhausting. Other options are:
+
++ Branches, but I have to switch each time
++ Files, but I think subject to the same limitation
++ Orphan branches but ... blech even more confusing.
++ XML Manifest Server: probably the better option.
 
 * Issues
 
