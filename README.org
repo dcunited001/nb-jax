@@ -105,6 +105,7 @@ services:
     ports:
       - 8080:8888
     environment:
+      - JAX_PLATFORMS=cpu,rocm
       - HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION}
     volumes:
       - ${PWD}/jax:/workspace/jax
@@ -120,6 +121,10 @@ docker compose --env-file=.env.jupyter -f compose-jupyter.yml
 #+end_src
 
 **** Run With Docker
+
+=JAX_BACKENDS= definitely needs to be specified with =rocm=, not =gpu= which
+aliases to both =cuda= and =rocm= -- and does anyone actually want to build that?
+just use the network as a moat to protect your sanity.
 
 #+begin_src sh :tangle bin/drun.sh :noweb yes
 #ROCM_IMAGE=<<tf-rocm-image>>
